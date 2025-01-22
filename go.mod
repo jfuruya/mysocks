@@ -1,4 +1,4 @@
-module github.com/jfuruya2/mysocks
+module github.com/jfuruya/mysocks
 
 go 1.22.1
 

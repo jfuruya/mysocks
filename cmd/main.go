@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/jfuruya2/mysocks"
+	"github.com/jfuruya/mysocks"
 )
 
 func main() {
