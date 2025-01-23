@@ -7,21 +7,21 @@ import (
 	"log"
 )
 
-var ErrNegotiationMethodNotSupported = errors.New("the method is not supported")
+var errNegotiationMethodNotSupported = errors.New("the method is not supported")
 
-type NegotiationRequest struct {
+type negotiationRequest struct {
 	ver      byte
 	nmethods byte
 	methods  []byte
 }
 
-func NewNegotiationRequestFrom(reader io.Reader) (*NegotiationRequest, error) {
+func newNegotiationRequestFrom(reader io.Reader) (*negotiationRequest, error) {
 	verBytes := make([]byte, 1)
 	if _, err := io.ReadFull(reader, verBytes); err != nil {
 		return nil, err
 	}
 	ver := verBytes[0]
-	if ver != Ver {
+	if ver != fiexedVer {
 		return nil, fmt.Errorf("the value of the VER field in the negotiation request is invalid: %d", ver)
 	}
 	nmethodsBytes := make([]byte, 1)
@@ -47,10 +47,10 @@ func NewNegotiationRequestFrom(reader io.Reader) (*NegotiationRequest, error) {
 	}
 
 	if !methodAggreed {
-		return nil, ErrNegotiationMethodNotSupported
+		return nil, errNegotiationMethodNotSupported
 	}
 
-	return &NegotiationRequest{
+	return &negotiationRequest{
 		ver:      ver,
 		nmethods: nmethods,
 		methods:  methods,

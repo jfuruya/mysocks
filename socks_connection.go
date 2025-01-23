@@ -5,17 +5,17 @@ import (
 	"net"
 )
 
-type SocksConnection struct {
+type socksConnection struct {
 	tcpConn *net.Conn
 }
 
-func NewSocksConnection(tcpConn *net.Conn) *SocksConnection {
-	return &SocksConnection{
+func newSocksConnection(tcpConn *net.Conn) *socksConnection {
+	return &socksConnection{
 		tcpConn: tcpConn,
 	}
 }
 
-func (sockesConnection *SocksConnection) Handle() {
+func (sockesConnection *socksConnection) handle() {
 	defer func() {
 		(*sockesConnection.tcpConn).Close()
 		log.Printf("The client has disconnected.")
@@ -23,10 +23,10 @@ func (sockesConnection *SocksConnection) Handle() {
 
 	log.Printf("A new client has connected.")
 
-	_, err := NewNegotiationRequestFrom(*sockesConnection.tcpConn)
+	_, err := newNegotiationRequestFrom(*sockesConnection.tcpConn)
 	if err != nil {
-		if err == ErrNegotiationMethodNotSupported {
-			negotiationReply := NewNegotiationReply(NoAcceptable)
+		if err == errNegotiationMethodNotSupported {
+			negotiationReply := newNegotiationReply(noAcceptable)
 			if _, err := negotiationReply.WriteTo(*sockesConnection.tcpConn); err != nil {
 				log.Printf("Failed to write the negotiation reply.")
 				return
@@ -37,24 +37,24 @@ func (sockesConnection *SocksConnection) Handle() {
 		return
 	}
 
-	negotiationReply := NewNegotiationReply(SupportedMethod)
+	negotiationReply := newNegotiationReply(SupportedMethod)
 	if _, err := negotiationReply.WriteTo(*sockesConnection.tcpConn); err != nil {
 		log.Printf("Failed to write the negotiation reply.")
 		return
 	}
 
-	request, err := NewRequestFrom(sockesConnection)
+	request, err := newRequestFrom(sockesConnection)
 	if err != nil {
-		if err == ErrRequestCmdNotSupported {
-			reply := NewErrorReply(RepCmdNotSupported, ATYPIPv4)
+		if err == errRequestCmdNotSupported {
+			reply := newErrorReply(repCmdNotSupported, atypeIPv4)
 			if _, err := reply.WriteTo(*sockesConnection.tcpConn); err != nil {
 				log.Printf("Failed to write the reply.")
 				return
 			}
 		}
 
-		if err == ErrRequestAtypNotSupported {
-			reply := NewErrorReply(RepAddrNotSupported, ATYPIPv4)
+		if err == errRequestAtypNotSupported {
+			reply := newErrorReply(repAddrNotSupported, atypeIPv4)
 			if _, err := reply.WriteTo(*sockesConnection.tcpConn); err != nil {
 				log.Printf("Failed to write the reply.")
 				return
@@ -65,10 +65,10 @@ func (sockesConnection *SocksConnection) Handle() {
 		return
 	}
 
-	err = request.ProcessCmd()
+	err = request.processCmd()
 	if err != nil {
-		if err == ErrRequestNotReacheble {
-			reply := NewErrorReply(RepHostUnreach, ATYPIPv4)
+		if err == errRequestNotReacheble {
+			reply := newErrorReply(repHostUnreach, atypeIPv4)
 			if _, err := reply.WriteTo(*sockesConnection.tcpConn); err != nil {
 				log.Printf("Failed to write the reply.")
 				return

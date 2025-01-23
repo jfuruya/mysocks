@@ -11,31 +11,31 @@ import (
 )
 
 var (
-	ErrRequestNotReacheble     = fmt.Errorf("the destination is not reachable")
-	ErrRequestCmdNotSupported  = fmt.Errorf("the command is not supported")
-	ErrRequestAtypNotSupported = fmt.Errorf("the address type is not supported")
+	errRequestNotReacheble     = fmt.Errorf("the destination is not reachable")
+	errRequestCmdNotSupported  = fmt.Errorf("the command is not supported")
+	errRequestAtypNotSupported = fmt.Errorf("the address type is not supported")
 )
 
-type Request struct {
-	Ver             byte
-	Cmd             byte
-	Rsv             byte // 0x00
-	Atyp            byte
-	DstAddr         []byte
-	DstPort         []byte // 2 bytes
-	SocksConnection *SocksConnection
+type request struct {
+	ver             byte
+	cmd             byte
+	rsv             byte // 0x00
+	atyp            byte
+	dstAddr         []byte
+	dstPort         []byte // 2 bytes
+	socksConnection *socksConnection
 }
 
 const tcpTimeout = 60
 
-func NewRequestFrom(socksConnection *SocksConnection) (*Request, error) {
+func newRequestFrom(socksConnection *socksConnection) (*request, error) {
 	reader := *socksConnection.tcpConn
 	verBytes := make([]byte, 1)
 	if _, err := io.ReadFull(reader, verBytes); err != nil {
 		return nil, err
 	}
 	ver := verBytes[0]
-	if ver != Ver {
+	if ver != fiexedVer {
 		return nil, fmt.Errorf("the value of the VER field in the negotiation request is invalid: %d", ver)
 	}
 
@@ -44,11 +44,8 @@ func NewRequestFrom(socksConnection *SocksConnection) (*Request, error) {
 		return nil, err
 	}
 	cmd := cmdBytes[0]
-	if ver != Ver {
-		return nil, fmt.Errorf("the value of the VER field in the negotiation request is invalid: %d", ver)
-	}
-	if cmd != SupportedCmd {
-		return nil, ErrRequestCmdNotSupported
+	if cmd != supportedCmd {
+		return nil, errRequestCmdNotSupported
 	}
 
 	rsvBytes := make([]byte, 1)
@@ -56,7 +53,7 @@ func NewRequestFrom(socksConnection *SocksConnection) (*Request, error) {
 		return nil, err
 	}
 	rsv := rsvBytes[0]
-	if rsv != Rsv {
+	if rsv != fixedRsv {
 		return nil, fmt.Errorf("the value of the RSV field in the request is invalid: %d", rsv)
 	}
 
@@ -65,18 +62,18 @@ func NewRequestFrom(socksConnection *SocksConnection) (*Request, error) {
 		return nil, err
 	}
 	atyp := atypBytes[0]
-	if atyp != ATYPIPv4 && atyp != ATYPIPv6 && atyp != ATYPDomain {
-		return nil, ErrRequestAtypNotSupported
+	if atyp != atypeIPv4 && atyp != atypeIPv6 && atyp != atypeDomain {
+		return nil, errRequestAtypNotSupported
 	}
 
 	var dstAddr []byte
-	if atyp == ATYPIPv4 {
+	if atyp == atypeIPv4 {
 		dstAddr = make([]byte, 4)
 		if _, err := io.ReadFull(reader, dstAddr); err != nil {
 			return nil, err
 		}
 	}
-	if atyp == ATYPDomain {
+	if atyp == atypeDomain {
 		dstAddrLengthBytes := make([]byte, 1)
 		if _, err := io.ReadFull(reader, dstAddrLengthBytes); err != nil {
 			return nil, err
@@ -90,7 +87,7 @@ func NewRequestFrom(socksConnection *SocksConnection) (*Request, error) {
 			return nil, err
 		}
 	}
-	if atyp == ATYPIPv6 {
+	if atyp == atypeIPv6 {
 		dstAddr = make([]byte, 16)
 		if _, err := io.ReadFull(reader, dstAddr); err != nil {
 			return nil, err
@@ -106,27 +103,27 @@ func NewRequestFrom(socksConnection *SocksConnection) (*Request, error) {
 		"VER: %#v CMD: %#v RSV: %#v ATYP: %#v DST.ADDR: %#v DST.PORT: %#v\n",
 		ver, cmd, rsv, atyp, dstAddr, dstPort)
 
-	return &Request{
-		Ver:             ver,
-		Cmd:             cmd,
-		Rsv:             rsv,
-		Atyp:            atyp,
-		DstAddr:         dstAddr,
-		DstPort:         dstPort,
-		SocksConnection: socksConnection,
+	return &request{
+		ver:             ver,
+		cmd:             cmd,
+		rsv:             rsv,
+		atyp:            atyp,
+		dstAddr:         dstAddr,
+		dstPort:         dstPort,
+		socksConnection: socksConnection,
 	}, nil
 }
 
-func (request *Request) ProcessCmd() error {
-	switch request.Cmd {
-	case CmdConnect:
+func (request *request) processCmd() error {
+	switch request.cmd {
+	case cmdConnect:
 		return request.handleConnect()
 	default:
-		return ErrRequestCmdNotSupported
+		return errRequestCmdNotSupported
 	}
 }
 
-func (request *Request) handleConnect() error {
+func (request *request) handleConnect() error {
 	conn, err := request.connect()
 	if err != nil {
 		return err
@@ -136,20 +133,20 @@ func (request *Request) handleConnect() error {
 	addr := conn.LocalAddr().(*net.TCPAddr).IP
 	var atype byte
 	if addr.To4() != nil {
-		atype = ATYPIPv4
+		atype = atypeIPv4
 	} else {
-		atype = ATYPIPv6
+		atype = atypeIPv6
 	}
 	port := make([]byte, 2)
 	binary.BigEndian.PutUint16(port, uint16(conn.LocalAddr().(*net.TCPAddr).Port))
 
-	reply := NewReply(RepSucceeded, atype, addr, port)
-	if _, err := reply.WriteTo(*request.SocksConnection.tcpConn); err != nil {
+	reply := newReply(repSucceeded, atype, addr, port)
+	if _, err := reply.WriteTo(*request.socksConnection.tcpConn); err != nil {
 		log.Printf("Failed to write the reply.")
 		return err
 	}
 
-	clientConn := *request.SocksConnection.tcpConn
+	clientConn := *request.socksConnection.tcpConn
 
 	go func() {
 		var bf [1024 * 2]byte
@@ -182,21 +179,21 @@ func (request *Request) handleConnect() error {
 	}
 }
 
-func (request *Request) connect() (net.Conn, error) {
-	conn, err := net.Dial("tcp", request.DestAddress())
+func (request *request) connect() (net.Conn, error) {
+	conn, err := net.Dial("tcp", request.destAddress())
 	if err != nil {
-		return nil, ErrRequestNotReacheble
+		return nil, errRequestNotReacheble
 	}
 	return conn, nil
 }
 
-func (r *Request) DestAddress() string {
+func (r *request) destAddress() string {
 	var host string
-	if r.Atyp == ATYPDomain {
-		host = string(r.DstAddr)
+	if r.atyp == atypeDomain {
+		host = string(r.dstAddr)
 	} else {
-		host = net.IP(r.DstAddr).String()
+		host = net.IP(r.dstAddr).String()
 	}
-	port := strconv.Itoa(int(binary.BigEndian.Uint16(r.DstPort)))
+	port := strconv.Itoa(int(binary.BigEndian.Uint16(r.dstPort)))
 	return net.JoinHostPort(host, port)
 }

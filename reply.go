@@ -6,48 +6,48 @@ import (
 	"net"
 )
 
-// Reply is the reply packet
-type Reply struct {
-	Ver  byte
-	Rep  byte
-	Rsv  byte // 0x00
-	Atyp byte
+// reply is the reply packet
+type reply struct {
+	ver  byte
+	rep  byte
+	rsv  byte // 0x00
+	atyp byte
 	// CONNECT socks server's address which used to connect to dst addr
 	// BIND ...
 	// UDP socks server's address which used to connect to dst addr
-	BndAddr []byte
+	bndAddr []byte
 	// CONNECT socks server's port which used to connect to dst addr
 	// BIND ...
 	// UDP socks server's port which used to connect to dst addr
-	BndPort []byte // 2 bytes
+	bndPort []byte // 2 bytes
 }
 
 const (
-	RepSucceeded        byte = 0x00
-	RepGeneral          byte = 0x01
-	RepDenied           byte = 0x02
-	RepNetUnreach       byte = 0x03
-	RepHostUnreach      byte = 0x04
-	RepConnRefused      byte = 0x05
-	RepTTLExpired       byte = 0x06
-	RepCmdNotSupported  byte = 0x07
-	RepAddrNotSupported byte = 0x08
+	repSucceeded        byte = 0x00
+	repGeneral          byte = 0x01
+	repDenied           byte = 0x02
+	repNetUnreach       byte = 0x03
+	repHostUnreach      byte = 0x04
+	repConnRefused      byte = 0x05
+	repTTLExpired       byte = 0x06
+	repCmdNotSupported  byte = 0x07
+	repAddrNotSupported byte = 0x08
 )
 
-func NewReply(rep byte, atype byte, bndAddr []byte, bndPort []byte) *Reply {
-	return &Reply{
-		Ver:     Ver,
-		Rep:     rep,
-		Rsv:     0x00,
-		Atyp:    atype,
-		BndAddr: bndAddr,
-		BndPort: bndPort,
+func newReply(rep byte, atype byte, bndAddr []byte, bndPort []byte) *reply {
+	return &reply{
+		ver:     fiexedVer,
+		rep:     rep,
+		rsv:     fixedRsv,
+		atyp:    atype,
+		bndAddr: bndAddr,
+		bndPort: bndPort,
 	}
 }
 
-func NewErrorReply(rep byte, atype byte) *Reply {
+func newErrorReply(rep byte, atype byte) *reply {
 	var bndAddr []byte
-	if atype == ATYPDomain || atype == ATYPIPv4 {
+	if atype == atypeDomain || atype == atypeIPv4 {
 		bndAddr = []byte{0x00, 0x00, 0x00, 0x00}
 	} else {
 		bndAddr = []byte(net.IPv6zero)
@@ -55,24 +55,24 @@ func NewErrorReply(rep byte, atype byte) *Reply {
 
 	bndPort := []byte{0x00, 0x00}
 
-	return &Reply{
-		Ver:     Ver,
-		Rep:     rep,
-		Rsv:     0x00,
-		Atyp:    atype,
-		BndAddr: bndAddr,
-		BndPort: bndPort,
+	return &reply{
+		ver:     fiexedVer,
+		rep:     rep,
+		rsv:     fixedRsv,
+		atyp:    atype,
+		bndAddr: bndAddr,
+		bndPort: bndPort,
 	}
 }
 
-func (r *Reply) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write(append(append([]byte{r.Ver, r.Rep, r.Rsv, r.Atyp}, r.BndAddr...), r.BndPort...))
+func (r *reply) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write(append(append([]byte{r.ver, r.rep, r.rsv, r.atyp}, r.bndAddr...), r.bndPort...))
 	if err != nil {
 		return 0, err
 	}
 
 	log.Printf("Reply sent. VER: %#v REP: %#v RSV: %#v ATYPE: %#v BND.ARRR: %#v BND.PORT: %#v\n",
-		r.Ver, r.Rep, r.Rsv, r.Atyp, r.BndAddr, r.BndPort)
+		r.ver, r.rep, r.rsv, r.atyp, r.bndAddr, r.bndPort)
 
 	return int64(n), nil
 }

@@ -1,6 +1,6 @@
 package mysocks
 
 const (
-	Ver byte = 0x05
-	Rsv byte = 0x00
+	fiexedVer byte = 0x05
+	fixedRsv  byte = 0x00
 )

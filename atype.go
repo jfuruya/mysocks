@@ -1,7 +1,7 @@
 package mysocks
 
 const (
-	ATYPIPv4   byte = 0x01
-	ATYPDomain byte = 0x03
-	ATYPIPv6   byte = 0x04
+	atypeIPv4   byte = 0x01
+	atypeDomain byte = 0x03
+	atypeIPv6   byte = 0x04
 )

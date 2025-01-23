@@ -41,9 +41,9 @@ func (s *Server) Start() error {
 			return err
 		}
 
-		socksConnection := NewSocksConnection(&conn)
+		socksConnection := newSocksConnection(&conn)
 
-		go socksConnection.Handle()
+		go socksConnection.handle()
 	}
 }
 
