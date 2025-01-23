@@ -9,4 +9,4 @@ const (
 	noAcceptable   byte = 0xFF
 )
 
-var SupportedMethod = noAuthRequired
+var supportedMethod = noAuthRequired

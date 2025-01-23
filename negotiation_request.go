@@ -41,7 +41,7 @@ func newNegotiationRequestFrom(reader io.Reader) (*negotiationRequest, error) {
 
 	var methodAggreed bool
 	for _, method := range methods {
-		if method == byte(SupportedMethod) {
+		if method == byte(supportedMethod) {
 			methodAggreed = true
 		}
 	}

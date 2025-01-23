@@ -37,7 +37,7 @@ func (sockesConnection *socksConnection) handle() {
 		return
 	}
 
-	negotiationReply := newNegotiationReply(SupportedMethod)
+	negotiationReply := newNegotiationReply(supportedMethod)
 	if _, err := negotiationReply.WriteTo(*sockesConnection.tcpConn); err != nil {
 		log.Printf("Failed to write the negotiation reply.")
 		return
