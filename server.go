@@ -13,9 +13,9 @@ type Server struct {
 	listener *net.Listener
 }
 
-func NewServer(port int) *Server {
+func NewServer() *Server {
 	return &Server{
-		port:  port,
+		port:  portFromEnv(),
 		ready: make(chan struct{}),
 	}
 }

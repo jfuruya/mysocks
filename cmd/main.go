@@ -5,7 +5,7 @@ import (
 )
 
 func main() {
-	socksServer := mysocks.NewServer(58080)
+	socksServer := mysocks.NewServer()
 	err := socksServer.Start()
 	if err != nil {
 		panic(err)

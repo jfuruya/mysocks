@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"testing"
 
@@ -15,7 +16,9 @@ import (
 func TestServer(t *testing.T) {
 	port := 9000
 
-	server := NewServer(port)
+	os.Setenv("MYSOCKS_PORT", strconv.Itoa(port))
+
+	server := NewServer()
 
 	go func() {
 		err := server.Start()
