@@ -1,12 +1,12 @@
 package mysocks
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
 	"net"
-	"strconv"
 	"time"
 )
 
@@ -17,26 +17,24 @@ var (
 )
 
 type request struct {
-	ver             byte
-	cmd             byte
-	rsv             byte // 0x00
-	atyp            byte
-	dstAddr         []byte
-	dstPort         []byte // 2 bytes
+	ver byte
+	cmd byte
+	rsv byte // 0x00
+	dst
 	socksConnection *socksConnection
 }
 
 const tcpTimeout = 60
 
 func newRequestFrom(socksConnection *socksConnection) (*request, error) {
-	reader := *socksConnection.tcpConn
+	reader := *socksConnection.clientTCPConn
 	verBytes := make([]byte, 1)
 	if _, err := io.ReadFull(reader, verBytes); err != nil {
 		return nil, err
 	}
 	ver := verBytes[0]
 	if ver != fiexedVer {
-		return nil, fmt.Errorf("the value of the VER field in the negotiation request is invalid: %d", ver)
+		return nil, fmt.Errorf("the value of the VER field in the negotiation request is invalid: %d %v", ver, socksConnection)
 	}
 
 	cmdBytes := make([]byte, 1)
@@ -44,7 +42,7 @@ func newRequestFrom(socksConnection *socksConnection) (*request, error) {
 		return nil, err
 	}
 	cmd := cmdBytes[0]
-	if cmd != supportedCmd {
+	if !supportedCmd(cmd) {
 		return nil, errRequestCmdNotSupported
 	}
 
@@ -54,7 +52,7 @@ func newRequestFrom(socksConnection *socksConnection) (*request, error) {
 	}
 	rsv := rsvBytes[0]
 	if rsv != fixedRsv {
-		return nil, fmt.Errorf("the value of the RSV field in the request is invalid: %d", rsv)
+		return nil, fmt.Errorf("the value of the RSV field in the request is invalid: %d %v", rsv, socksConnection)
 	}
 
 	atypBytes := make([]byte, 1)
@@ -62,36 +60,13 @@ func newRequestFrom(socksConnection *socksConnection) (*request, error) {
 		return nil, err
 	}
 	atyp := atypBytes[0]
-	if atyp != atypeIPv4 && atyp != atypeIPv6 && atyp != atypeDomain {
+	if !supportedAtyp(atyp) {
 		return nil, errRequestAtypNotSupported
 	}
 
-	var dstAddr []byte
-	if atyp == atypeIPv4 {
-		dstAddr = make([]byte, 4)
-		if _, err := io.ReadFull(reader, dstAddr); err != nil {
-			return nil, err
-		}
-	}
-	if atyp == atypeDomain {
-		dstAddrLengthBytes := make([]byte, 1)
-		if _, err := io.ReadFull(reader, dstAddrLengthBytes); err != nil {
-			return nil, err
-		}
-		dstAddrLenth := dstAddrLengthBytes[0]
-		if dstAddrLenth == 0 {
-			return nil, fmt.Errorf("the value of the first byte of ATYPE field in the request is invalid: %d", dstAddrLenth)
-		}
-		dstAddr = make([]byte, int(dstAddrLenth))
-		if _, err := io.ReadFull(reader, dstAddr); err != nil {
-			return nil, err
-		}
-	}
-	if atyp == atypeIPv6 {
-		dstAddr = make([]byte, 16)
-		if _, err := io.ReadFull(reader, dstAddr); err != nil {
-			return nil, err
-		}
+	dstAddr, err := readDestAddr(reader, atyp)
+	if err != nil {
+		return nil, err
 	}
 
 	dstPort := make([]byte, 2)
@@ -100,16 +75,18 @@ func newRequestFrom(socksConnection *socksConnection) (*request, error) {
 	}
 
 	log.Printf("A request has been received. "+
-		"VER: %#v CMD: %#v RSV: %#v ATYP: %#v DST.ADDR: %#v DST.PORT: %#v\n",
-		ver, cmd, rsv, atyp, dstAddr, dstPort)
+		"VER: %#v CMD: %#v RSV: %#v ATYP: %#v DST.ADDR: %#v DST.PORT: %#v %v\n",
+		ver, cmd, rsv, atyp, dstAddr, dstPort, socksConnection)
 
 	return &request{
-		ver:             ver,
-		cmd:             cmd,
-		rsv:             rsv,
-		atyp:            atyp,
-		dstAddr:         dstAddr,
-		dstPort:         dstPort,
+		ver: ver,
+		cmd: cmd,
+		rsv: rsv,
+		dst: dst{
+			atyp: atyp,
+			addr: dstAddr,
+			port: dstPort,
+		},
 		socksConnection: socksConnection,
 	}, nil
 }
@@ -118,35 +95,29 @@ func (request *request) processCmd() error {
 	switch request.cmd {
 	case cmdConnect:
 		return request.handleConnect()
+	case cmdAssociate:
+		return request.handleUDPAssociate()
 	default:
 		return errRequestCmdNotSupported
 	}
 }
 
 func (request *request) handleConnect() error {
+	var err error
+
 	conn, err := request.connect()
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	addr := conn.LocalAddr().(*net.TCPAddr).IP
-	var atype byte
-	if addr.To4() != nil {
-		atype = atypeIPv4
-	} else {
-		atype = atypeIPv6
-	}
-	port := make([]byte, 2)
-	binary.BigEndian.PutUint16(port, uint16(conn.LocalAddr().(*net.TCPAddr).Port))
-
-	reply := newReply(repSucceeded, atype, addr, port)
-	if _, err := reply.WriteTo(*request.socksConnection.tcpConn); err != nil {
-		log.Printf("Failed to write the reply.")
+	localAddrAsTCP := conn.LocalAddr().(*net.TCPAddr)
+	err = request.replySuccess(localAddrAsTCP.IP, localAddrAsTCP.Port)
+	if err != nil {
 		return err
 	}
 
-	clientConn := *request.socksConnection.tcpConn
+	clientConn := *request.socksConnection.clientTCPConn
 
 	go func() {
 		var bf [1024 * 2]byte
@@ -179,21 +150,64 @@ func (request *request) handleConnect() error {
 	}
 }
 
+func (request *request) replySuccess(ip net.IP, port int) error {
+	var atype byte
+	if ip.To4() != nil {
+		atype = atypIPv4
+	} else if ip.To16() != nil {
+		atype = atypIPv6
+	} else {
+		atype = atypDomain
+	}
+
+	portBytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(portBytes, uint16(port))
+
+	reply := newReply(repSucceeded, atype, ip, portBytes, request.socksConnection)
+	if _, err := reply.WriteTo(*request.socksConnection.clientTCPConn); err != nil {
+		log.Printf("Failed to write the reply.")
+		return err
+	}
+	return nil
+}
+
 func (request *request) connect() (net.Conn, error) {
 	conn, err := net.Dial("tcp", request.destAddress())
 	if err != nil {
 		return nil, errRequestNotReacheble
+
 	}
+	log.Printf("A TCP connection has been established to: %s\n", request.destAddress())
+
 	return conn, nil
 }
 
-func (r *request) destAddress() string {
-	var host string
-	if r.atyp == atypeDomain {
-		host = string(r.dstAddr)
+func (request *request) handleUDPAssociate() error {
+	var clientAddrForAccessLimit *net.UDPAddr
+	var err error
+	if bytes.Equal(request.dst.port, []byte{0x00, 0x00}) {
+		clientAddrForAccessLimit, err = net.ResolveUDPAddr("udp", (*request.socksConnection.clientTCPConn).RemoteAddr().String())
 	} else {
-		host = net.IP(r.dstAddr).String()
+		clientAddrForAccessLimit, err = net.ResolveUDPAddr("udp", request.destAddress())
 	}
-	port := strconv.Itoa(int(binary.BigEndian.Uint16(r.dstPort)))
-	return net.JoinHostPort(host, port)
+	if err != nil {
+		return errRequestNotReacheble
+	}
+
+	serverAddrAsUDP := (*request.socksConnection.server.udpConn).LocalAddr().(*net.UDPAddr)
+	err = request.replySuccess(net.IP(request.socksConnection.server.hostName), serverAddrAsUDP.Port)
+	if err != nil {
+		return err
+	}
+
+	udpAssociation := *newUDPAssociation(clientAddrForAccessLimit)
+	defer udpAssociation.end()
+
+	request.socksConnection.udpAssociation = &udpAssociation
+
+	io.Copy(io.Discard, *request.socksConnection.clientTCPConn)
+
+	log.Printf("A TCP connection that associated with UDP has been closed. %s %v\n", clientAddrForAccessLimit, request.socksConnection)
+
+	return nil
 }

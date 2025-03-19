@@ -19,7 +19,8 @@ type reply struct {
 	// CONNECT socks server's port which used to connect to dst addr
 	// BIND ...
 	// UDP socks server's port which used to connect to dst addr
-	bndPort []byte // 2 bytes
+	bndPort         []byte // 2 bytes
+	socksConnection *socksConnection
 }
 
 const (
@@ -34,20 +35,24 @@ const (
 	repAddrNotSupported byte = 0x08
 )
 
-func newReply(rep byte, atype byte, bndAddr []byte, bndPort []byte) *reply {
+func newReply(rep byte, atype byte, bndAddr []byte, bndPort []byte, socksConnection *socksConnection) *reply {
+	if atype == atypDomain {
+		bndAddr = append([]byte{byte(len(bndAddr))}, bndAddr...)
+	}
 	return &reply{
-		ver:     fiexedVer,
-		rep:     rep,
-		rsv:     fixedRsv,
-		atyp:    atype,
-		bndAddr: bndAddr,
-		bndPort: bndPort,
+		ver:             fiexedVer,
+		rep:             rep,
+		rsv:             fixedRsv,
+		atyp:            atype,
+		bndAddr:         bndAddr,
+		bndPort:         bndPort,
+		socksConnection: socksConnection,
 	}
 }
 
-func newErrorReply(rep byte, atype byte) *reply {
+func newErrorReply(rep byte, atype byte, socksConnection *socksConnection) *reply {
 	var bndAddr []byte
-	if atype == atypeDomain || atype == atypeIPv4 {
+	if atype == atypDomain || atype == atypIPv4 {
 		bndAddr = []byte{0x00, 0x00, 0x00, 0x00}
 	} else {
 		bndAddr = []byte(net.IPv6zero)
@@ -56,23 +61,24 @@ func newErrorReply(rep byte, atype byte) *reply {
 	bndPort := []byte{0x00, 0x00}
 
 	return &reply{
-		ver:     fiexedVer,
-		rep:     rep,
-		rsv:     fixedRsv,
-		atyp:    atype,
-		bndAddr: bndAddr,
-		bndPort: bndPort,
+		ver:             fiexedVer,
+		rep:             rep,
+		rsv:             fixedRsv,
+		atyp:            atype,
+		bndAddr:         bndAddr,
+		bndPort:         bndPort,
+		socksConnection: socksConnection,
 	}
 }
 
-func (r *reply) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write(append(append([]byte{r.ver, r.rep, r.rsv, r.atyp}, r.bndAddr...), r.bndPort...))
+func (reply *reply) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write(append(append([]byte{reply.ver, reply.rep, reply.rsv, reply.atyp}, reply.bndAddr...), reply.bndPort...))
 	if err != nil {
 		return 0, err
 	}
 
-	log.Printf("Reply sent. VER: %#v REP: %#v RSV: %#v ATYPE: %#v BND.ARRR: %#v BND.PORT: %#v\n",
-		r.ver, r.rep, r.rsv, r.atyp, r.bndAddr, r.bndPort)
+	log.Printf("Reply sent. VER: %#v REP: %#v RSV: %#v ATYPE: %#v BND.ARRR: %#v BND.PORT: %#v %v\n",
+		reply.ver, reply.rep, reply.rsv, reply.atyp, reply.bndAddr, reply.bndPort, reply.socksConnection)
 
 	return int64(n), nil
 }

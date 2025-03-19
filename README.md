@@ -3,5 +3,5 @@
 A SOCKS5 server for learning purposes.
 
 ## Features
-- Only the CONNECT command is supported.
+- CONNECT/UDP Associate command is supported.
 - Authentication is not supported.

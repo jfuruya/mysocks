@@ -6,4 +6,6 @@ const (
 	cmdAssociate byte = 0x03
 )
 
-var supportedCmd = cmdConnect
+func supportedCmd(cmd byte) bool {
+	return cmd == cmdConnect || cmd == cmdAssociate
+}

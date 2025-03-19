@@ -6,14 +6,16 @@ import (
 )
 
 type negotiationReply struct {
-	ver    byte
-	method byte
+	ver             byte
+	method          byte
+	socksConnection *socksConnection
 }
 
-func newNegotiationReply(method byte) *negotiationReply {
+func newNegotiationReply(method byte, socksConnection *socksConnection) *negotiationReply {
 	return &negotiationReply{
-		ver:    fiexedVer,
-		method: method,
+		ver:             fiexedVer,
+		method:          method,
+		socksConnection: socksConnection,
 	}
 }
 
@@ -23,7 +25,7 @@ func (r *negotiationReply) WriteTo(w io.Writer) (int64, error) {
 		return 0, err
 	}
 
-	log.Printf("Negotiation reply sent. VER: %#v METHOD: %#v\n", r.ver, r.method)
+	log.Printf("Negotiation reply sent. VER: %#v METHOD: %#v %v\n", r.ver, r.method, r.socksConnection)
 
 	return int64(n), nil
 }

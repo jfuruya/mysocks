@@ -28,3 +28,7 @@ func intEnv(name string, defaultValue int) int {
 func portFromEnv() int {
 	return intEnv("MYSOCKS_PORT", 1080)
 }
+
+func hostNameFromEnv() string {
+	return env("MYSOCKS_HOSTNAME", "localhost")
+}
