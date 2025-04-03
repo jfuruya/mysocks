@@ -16,16 +16,6 @@ func newUDPAssociation(clientAddrForAccessLimit *net.UDPAddr) *udpAssociation {
 	}
 }
 
-func (udpAssociation *udpAssociation) String() string {
-	if udpAssociation == nil {
-		return ""
-	}
-	if udpAssociation.clientAddr == nil {
-		return ""
-	}
-	return "remote address of UDP client: " + udpAssociation.clientAddrForAccessLimit.String()
-}
-
 func (udpAssociation *udpAssociation) end() {
 	close(udpAssociation.association)
 	udpAssociation.destConn.Close()

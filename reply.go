@@ -1,8 +1,8 @@
 package mysocks
 
 import (
+	"fmt"
 	"io"
-	"log"
 	"net"
 )
 
@@ -77,8 +77,9 @@ func (reply *reply) WriteTo(w io.Writer) (int64, error) {
 		return 0, err
 	}
 
-	log.Printf("Reply sent. VER: %#v REP: %#v RSV: %#v ATYPE: %#v BND.ARRR: %#v BND.PORT: %#v %v\n",
-		reply.ver, reply.rep, reply.rsv, reply.atyp, reply.bndAddr, reply.bndPort, reply.socksConnection)
+	reply.socksConnection.logWithLevel(logLevelInfo,
+		fmt.Sprintf("Reply sent. VER: %#v REP: %#v RSV: %#v ATYPE: %#v BND.ARRR: %#v BND.PORT: %#v",
+			reply.ver, reply.rep, reply.rsv, reply.atyp, reply.bndAddr, reply.bndPort))
 
 	return int64(n), nil
 }

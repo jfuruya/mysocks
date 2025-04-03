@@ -1,9 +1,8 @@
 package mysocks
 
 import (
-	"log"
+	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 )
@@ -27,8 +26,6 @@ func NewServer() *Server {
 }
 
 func (server *Server) Start() error {
-	log.SetOutput(os.Stdout)
-
 	var waitGroup sync.WaitGroup
 
 	waitGroup.Add(2)
@@ -41,17 +38,17 @@ func (server *Server) Start() error {
 
 	server.tcpListener = &tcpListener
 
-	log.Printf("TCP server has been started on port %d.", server.port)
+	logInfo(fmt.Sprintf("TCP server has been started on port %d.", server.port), nil)
 
 	go func() {
 		for {
 			conn, err := tcpListener.Accept()
 			if err != nil {
-				log.Printf("Failed to accept TCP connection: %v", err)
+				logError(fmt.Sprintf("Failed to accept TCP connection: %v", err), nil)
 				break
 			}
 
-			log.Printf("A new TCP connection has been received from: %v", conn.RemoteAddr())
+			logInfo(fmt.Sprintf("A new TCP connection has been received from: %v", conn.RemoteAddr()), nil)
 
 			socksConnection := newSocksConnection(&conn, server)
 
@@ -74,22 +71,22 @@ func (server *Server) Start() error {
 
 	server.udpConn = udpConn
 
-	log.Printf("UDP server has been started on port %d.", server.port)
+	logInfo(fmt.Sprintf("UDP server has been started on port %d.", server.port), nil)
 
 	go func() {
 		for {
 			buf := make([]byte, 65507) // 65507 is the maximum UDP payload size
 			n, addr, err := udpConn.ReadFromUDP(buf)
 			if err != nil {
-				log.Printf("Failed to read UDP datagram: %v", err)
+				logError(fmt.Sprintf("Failed to read UDP datagram: %v", err), nil)
 				break
 			}
 
-			log.Printf("A UDP data received from %s: %v", addr.String(), buf[:n])
+			logInfo(fmt.Sprintf("A UDP data received from %s: %v", addr.String(), buf[:n]), nil)
 
 			socksConnection := server.socksConnections.get(addr.IP)
 			if socksConnection == nil {
-				log.Printf("Error: There is no UDP association related to this remote address: %s", addr.String())
+				logError(fmt.Sprintf("There is no UDP association related to this remote address: %s", addr.String()), nil)
 				continue
 			}
 
@@ -97,11 +94,11 @@ func (server *Server) Start() error {
 
 			datagram, err := newDatagramFrom(buf[:n])
 			if err != nil {
-				log.Printf("Failed to create socks5 datagram: %v", err)
+				socksConnection.logWithLevel(logLevelError, fmt.Sprintf("Failed to create socks5 datagram: %v", err))
 				continue
 			}
 
-			log.Printf("A UDP datagram received from %s: %v", addr.String(), datagram)
+			socksConnection.logWithLevel(logLevelInfo, fmt.Sprintf("A UDP datagram received from %s: %v", addr.String(), datagram))
 
 			go socksConnection.handleUDP(datagram)
 		}
@@ -125,11 +122,11 @@ func (server *Server) Close() {
 
 	err = (*server.tcpListener).Close()
 	if err != nil {
-		log.Printf("Faild to close TCP listener: %v", err)
+		logError(fmt.Sprintf("Faild to close TCP listener: %v", err), nil)
 	}
 
 	err = server.udpConn.Close()
 	if err != nil {
-		log.Printf("Failed to close UDP listener: %v", err)
+		logError(fmt.Sprintf("Failed to close UDP listener: %v", err), nil)
 	}
 }

@@ -1,7 +1,7 @@
 package mysocks
 
 import (
-	"log"
+	"fmt"
 	"net"
 	"time"
 )
@@ -21,11 +21,15 @@ func newSocksConnection(tcpConn *net.Conn, server *Server) *socksConnection {
 	}
 }
 
-func (socksConnection *socksConnection) String() string {
-	if socksConnection == nil {
-		return ""
+func (socksConnection *socksConnection) logWithLevel(level int, message string) {
+	fields := map[string]interface{}{
+		"clientAddressOfTCPConnection": (*socksConnection.clientTCPConn).RemoteAddr().String(),
 	}
-	return "remote address of TCP connection: " + (*socksConnection.clientTCPConn).RemoteAddr().String() + ", " + socksConnection.udpAssociation.String()
+	if socksConnection.udpAssociation != nil {
+		fields["addressOfClientUDPSocket"] = socksConnection.udpAssociation.clientAddr.String()
+	}
+
+	logWithLevel(level, message, fields)
 }
 
 func (socksConnection *socksConnection) remoteIP() net.IP {
@@ -34,28 +38,27 @@ func (socksConnection *socksConnection) remoteIP() net.IP {
 
 func (socksConnection *socksConnection) handle() {
 	defer func() {
-		socksConnectionDesc := socksConnection
 		(*socksConnection.clientTCPConn).Close()
-		log.Printf("TCP connection has been closed. %v", socksConnectionDesc)
+		socksConnection.logWithLevel(logLevelInfo, "TCP connection has been closed.")
 	}()
 
-	_, err := newNegotiationRequestFrom(*socksConnection.clientTCPConn)
+	_, err := newNegotiationRequestFrom(socksConnection)
 	if err != nil {
 		if err == errNegotiationMethodNotSupported {
 			negotiationReply := newNegotiationReply(noAcceptable, socksConnection)
 			if _, err := negotiationReply.WriteTo(*socksConnection.clientTCPConn); err != nil {
-				log.Printf("Failed to write the negotiation reply. %v", socksConnection)
+				socksConnection.logWithLevel(logLevelError, "Failed to write the negotiation reply.")
 				return
 			}
 		}
 
-		log.Printf("Failed to read the negotiation request. %v", socksConnection)
+		socksConnection.logWithLevel(logLevelError, "Failed to read the negotiation request.")
 		return
 	}
 
 	negotiationReply := newNegotiationReply(supportedMethod, socksConnection)
 	if _, err := negotiationReply.WriteTo(*socksConnection.clientTCPConn); err != nil {
-		log.Printf("Failed to write the negotiation reply. %v", socksConnection)
+		socksConnection.logWithLevel(logLevelError, "Failed to write the negotiation reply.")
 		return
 	}
 
@@ -64,7 +67,7 @@ func (socksConnection *socksConnection) handle() {
 		if err == errRequestCmdNotSupported {
 			reply := newErrorReply(repCmdNotSupported, atypIPv4, socksConnection)
 			if _, err := reply.WriteTo(*socksConnection.clientTCPConn); err != nil {
-				log.Printf("Failed to write the reply. %v", socksConnection)
+				socksConnection.logWithLevel(logLevelError, "Failed to write the reply.")
 				return
 			}
 		}
@@ -72,12 +75,12 @@ func (socksConnection *socksConnection) handle() {
 		if err == errRequestAtypNotSupported {
 			reply := newErrorReply(repAddrNotSupported, atypIPv4, socksConnection)
 			if _, err := reply.WriteTo(*socksConnection.clientTCPConn); err != nil {
-				log.Printf("Failed to write the reply. %v", socksConnection)
+				socksConnection.logWithLevel(logLevelError, "Failed to write the reply.")
 				return
 			}
 		}
 
-		log.Printf("Failed to read the request. %v", socksConnection)
+		socksConnection.logWithLevel(logLevelError, "Failed to read the request.")
 		return
 	}
 
@@ -86,7 +89,7 @@ func (socksConnection *socksConnection) handle() {
 		if err == errRequestNotReacheble {
 			reply := newErrorReply(repHostUnreach, atypIPv4, socksConnection)
 			if _, err := reply.WriteTo(*socksConnection.clientTCPConn); err != nil {
-				log.Printf("Failed to write the reply.")
+				socksConnection.logWithLevel(logLevelError, "Failed to write the reply.")
 				return
 			}
 		}
@@ -97,11 +100,12 @@ func (socksConnection *socksConnection) handleUDP(datagram *datagram) {
 	if socksConnection.udpAssociation.destConn == nil {
 		conn, err := net.Dial("udp", datagram.destAddress())
 		if err != nil {
-			log.Printf("Error: %v %v", err, socksConnection)
+			socksConnection.logWithLevel(logLevelError, fmt.Sprintf("Error: %v", err))
 			return
 		}
 
-		log.Printf("A UDP socket has been created to: %s, from: %s\n", datagram.destAddress(), conn.LocalAddr().String())
+		socksConnection.logWithLevel(logLevelInfo,
+			fmt.Sprintf("A UDP socket has been created to: %s, from: %s", datagram.destAddress(), conn.LocalAddr().String()))
 
 		socksConnection.udpAssociation.destConn = conn.(*net.UDPConn)
 
@@ -111,13 +115,13 @@ func (socksConnection *socksConnection) handleUDP(datagram *datagram) {
 			defer func() {
 				socksConnection.udpAssociation.destConn.Close()
 				socksConnection.udpAssociation.destConn = nil
-				log.Printf("UDP connection has been closed. %v", socksConnection)
+				socksConnection.logWithLevel(logLevelInfo, "UDP connection has been closed.")
 			}()
 
 			for {
 				select {
 				case <-socksConnection.udpAssociation.association:
-					log.Printf("UDP association has been closed. %v", socksConnection)
+					socksConnection.logWithLevel(logLevelInfo, "UDP association has been closed.")
 					return
 				default:
 					if err := conn.SetDeadline(time.Now().Add(time.Duration(udpTimeout) * time.Second)); err != nil {
@@ -125,22 +129,26 @@ func (socksConnection *socksConnection) handleUDP(datagram *datagram) {
 					}
 
 					buf := make([]byte, 65507) // 65507 is the maximum UDP payload size
-					log.Printf("Waiting for a UDP data from %s", socksConnection.udpAssociation.destConn.RemoteAddr().String())
+					socksConnection.logWithLevel(logLevelInfo,
+						fmt.Sprintf("Waiting for a UDP data from %s", socksConnection.udpAssociation.destConn.RemoteAddr().String()))
 					n, err := socksConnection.udpAssociation.destConn.Read(buf)
 					if err != nil {
-						log.Printf("Failed to read UDP data from: %s: %v %v",
-							socksConnection.udpAssociation.destConn.RemoteAddr().String(), err, socksConnection)
+						socksConnection.logWithLevel(logLevelError,
+							fmt.Sprintf("Failed to read UDP data from '%s': %v",
+								socksConnection.udpAssociation.destConn.RemoteAddr().String(), err))
 						return
 					}
 
-					log.Printf("A UDP data received from %s: %v", socksConnection.udpAssociation.destConn.RemoteAddr().String(), buf[:n])
+					socksConnection.logWithLevel(logLevelInfo,
+						fmt.Sprintf("A UDP data received from '%s': %v", socksConnection.udpAssociation.destConn.RemoteAddr().String(), buf[:n]))
 
 					datagramSentToClient := newDatagram(datagram.dst, buf[:n])
 
 					if _, err := socksConnection.server.udpConn.WriteToUDP(
 						datagramSentToClient.bytes(),
 						socksConnection.udpAssociation.clientAddr); err != nil {
-						log.Printf("Failed to write UDP data to %s: %v %v", socksConnection.udpAssociation.clientAddr, err, socksConnection)
+						socksConnection.logWithLevel(logLevelError,
+							fmt.Sprintf("Failed to write UDP data to '%s': %v", socksConnection.udpAssociation.clientAddr, err))
 						return
 					}
 				}
@@ -152,15 +160,17 @@ func (socksConnection *socksConnection) handleUDP(datagram *datagram) {
 
 	select {
 	case <-socksConnection.udpAssociation.association:
-		log.Printf("UDP association has been closed. %v", socksConnection)
+		socksConnection.logWithLevel(logLevelInfo, "UDP association has been closed.")
 		return
 	default:
 		_, err := socksConnection.udpAssociation.destConn.Write(datagram.data)
 		if err != nil {
-			log.Printf("Failed to write UDP data to: %s, %v %v",
-				socksConnection.udpAssociation.destConn.RemoteAddr().String(), err, socksConnection)
+			socksConnection.logWithLevel(logLevelError,
+				fmt.Sprintf("Failed to write UDP data to '%s': %v",
+					socksConnection.udpAssociation.destConn.RemoteAddr().String(), err))
 			return
 		}
-		log.Printf("A UDP data sent to %s: %v", socksConnection.udpAssociation.destConn.RemoteAddr().String(), datagram.data)
+		socksConnection.logWithLevel(logLevelInfo,
+			fmt.Sprintf("A UDP data sent to '%s': %v", socksConnection.udpAssociation.destConn.RemoteAddr().String(), datagram.data))
 	}
 }

@@ -4,18 +4,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 )
 
 var errNegotiationMethodNotSupported = errors.New("the method is not supported")
 
 type negotiationRequest struct {
-	ver      byte
-	nmethods byte
-	methods  []byte
+	ver             byte
+	nmethods        byte
+	methods         []byte
+	socksConnection *socksConnection
 }
 
-func newNegotiationRequestFrom(reader io.Reader) (*negotiationRequest, error) {
+func newNegotiationRequestFrom(socksConnection *socksConnection) (*negotiationRequest, error) {
+	reader := *socksConnection.clientTCPConn
+
 	verBytes := make([]byte, 1)
 	if _, err := io.ReadFull(reader, verBytes); err != nil {
 		return nil, err
@@ -30,14 +32,15 @@ func newNegotiationRequestFrom(reader io.Reader) (*negotiationRequest, error) {
 	}
 	nmethods := nmethodsBytes[0]
 	if nmethods == 0 {
-		return nil, fmt.Errorf("the value of the NMETHODS field in the negotiation request is invalid. : %d", nmethods)
+		return nil, fmt.Errorf("the value of the NMETHODS field in the negotiation request is invalid: %d", nmethods)
 	}
 	methods := make([]byte, int(nmethods))
 	if _, err := io.ReadFull(reader, methods); err != nil {
 		return nil, err
 	}
 
-	log.Printf("A negotiation request has been received. VER: %#v NMETHODS: %#v METHOS: %#v\n", ver, nmethods, methods)
+	socksConnection.logWithLevel(logLevelInfo,
+		fmt.Sprintf("A negotiation request has been received. VER: %#v NMETHODS: %#v METHOS: %#v", ver, nmethods, methods))
 
 	var methodAggreed bool
 	for _, method := range methods {
@@ -51,8 +54,9 @@ func newNegotiationRequestFrom(reader io.Reader) (*negotiationRequest, error) {
 	}
 
 	return &negotiationRequest{
-		ver:      ver,
-		nmethods: nmethods,
-		methods:  methods,
+		ver:             ver,
+		nmethods:        nmethods,
+		methods:         methods,
+		socksConnection: socksConnection,
 	}, nil
 }

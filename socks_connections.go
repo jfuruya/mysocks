@@ -1,7 +1,7 @@
 package mysocks
 
 import (
-	"log"
+	"fmt"
 	"net"
 )
 
@@ -16,12 +16,12 @@ func newSocksConnections() *socksConnections {
 }
 
 func (socksConnections *socksConnections) add(sc *socksConnection) {
-	log.Printf("Remote IP remembered: %v", sc.remoteIP())
+	sc.logWithLevel(logLevelInfo, fmt.Sprintf("Remote IP remembered: %v", sc.remoteIP()))
 	socksConnections.connections[sc.remoteIP().String()] = sc
 }
 
 func (socksConnections *socksConnections) remove(sc *socksConnection) {
-	log.Printf("Remote IP forgotten: %v", sc.remoteIP())
+	sc.logWithLevel(logLevelInfo, fmt.Sprintf("Remote IP forgotten: %v", sc.remoteIP()))
 	delete(socksConnections.connections, sc.remoteIP().String())
 }
 

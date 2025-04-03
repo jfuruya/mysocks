@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"time"
 )
@@ -74,9 +73,10 @@ func newRequestFrom(socksConnection *socksConnection) (*request, error) {
 		return nil, err
 	}
 
-	log.Printf("A request has been received. "+
-		"VER: %#v CMD: %#v RSV: %#v ATYP: %#v DST.ADDR: %#v DST.PORT: %#v %v\n",
-		ver, cmd, rsv, atyp, dstAddr, dstPort, socksConnection)
+	socksConnection.logWithLevel(logLevelInfo,
+		fmt.Sprintf("A request has been received. "+
+			"VER: %#v CMD: %#v RSV: %#v ATYP: %#v DST.ADDR: %#v DST.PORT: %#v",
+			ver, cmd, rsv, atyp, dstAddr, dstPort))
 
 	return &request{
 		ver: ver,
@@ -165,7 +165,7 @@ func (request *request) replySuccess(ip net.IP, port int) error {
 
 	reply := newReply(repSucceeded, atype, ip, portBytes, request.socksConnection)
 	if _, err := reply.WriteTo(*request.socksConnection.clientTCPConn); err != nil {
-		log.Printf("Failed to write the reply.")
+		request.socksConnection.logWithLevel(logLevelError, "Failed to write the reply.")
 		return err
 	}
 	return nil
@@ -177,7 +177,8 @@ func (request *request) connect() (net.Conn, error) {
 		return nil, errRequestNotReacheble
 
 	}
-	log.Printf("A TCP connection has been established to: %s\n", request.destAddress())
+	request.socksConnection.logWithLevel(logLevelInfo,
+		fmt.Sprintf("A TCP connection has been established to: %s", request.destAddress()))
 
 	return conn, nil
 }
@@ -207,7 +208,8 @@ func (request *request) handleUDPAssociate() error {
 
 	io.Copy(io.Discard, *request.socksConnection.clientTCPConn)
 
-	log.Printf("A TCP connection that associated with UDP has been closed. %s %v\n", clientAddrForAccessLimit, request.socksConnection)
+	request.socksConnection.logWithLevel(logLevelInfo,
+		fmt.Sprintf("A TCP connection that associated with UDP has been closed. %s", clientAddrForAccessLimit))
 
 	return nil
 }
