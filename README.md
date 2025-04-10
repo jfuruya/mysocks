@@ -7,5 +7,6 @@ A SOCKS5 server for learning purposes.
     - CONNECT
     - UDP Associate
 - Supported METHODs
+    - NO AUTHENTICATION REQUIRED
     - USERNAME/PASSWORD
 
