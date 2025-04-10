@@ -32,3 +32,11 @@ func portFromEnv() int {
 func hostNameFromEnv() string {
 	return env("MYSOCKS_HOSTNAME", "localhost")
 }
+
+func userNameFromEnv() string {
+	return env("MYSOCKS_USER", "")
+}
+
+func passwordFromEnv() string {
+	return env("MYSOCKS_PASSWORD", "")
+}

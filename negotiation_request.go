@@ -26,6 +26,7 @@ func newNegotiationRequestFrom(socksConnection *socksConnection) (*negotiationRe
 	if ver != fiexedVer {
 		return nil, fmt.Errorf("the value of the VER field in the negotiation request is invalid: %d", ver)
 	}
+
 	nmethodsBytes := make([]byte, 1)
 	if _, err := io.ReadFull(reader, nmethodsBytes); err != nil {
 		return nil, err
@@ -42,14 +43,9 @@ func newNegotiationRequestFrom(socksConnection *socksConnection) (*negotiationRe
 	socksConnection.logWithLevel(logLevelInfo,
 		fmt.Sprintf("A negotiation request has been received. VER: %#v NMETHODS: %#v METHOS: %#v", ver, nmethods, methods))
 
-	var methodAggreed bool
-	for _, method := range methods {
-		if method == byte(supportedMethod) {
-			methodAggreed = true
-		}
-	}
+	methodToUse := methodToUseIn(methods)
 
-	if !methodAggreed {
+	if methodToUse == noAcceptable {
 		return nil, errNegotiationMethodNotSupported
 	}
 

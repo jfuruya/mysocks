@@ -17,6 +17,12 @@ type Server struct {
 }
 
 func NewServer() *Server {
+	userName := userNameFromEnv()
+	password := passwordFromEnv()
+	if userName != "" && password != "" {
+		addCredential(userName, password)
+	}
+
 	return &Server{
 		port:             portFromEnv(),
 		ready:            make(chan struct{}),

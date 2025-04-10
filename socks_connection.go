@@ -42,7 +42,7 @@ func (socksConnection *socksConnection) handle() {
 		socksConnection.logWithLevel(logLevelInfo, "TCP connection has been closed.")
 	}()
 
-	_, err := newNegotiationRequestFrom(socksConnection)
+	negotiationRequest, err := newNegotiationRequestFrom(socksConnection)
 	if err != nil {
 		if err == errNegotiationMethodNotSupported {
 			negotiationReply := newNegotiationReply(noAcceptable, socksConnection)
@@ -56,10 +56,29 @@ func (socksConnection *socksConnection) handle() {
 		return
 	}
 
-	negotiationReply := newNegotiationReply(supportedMethod, socksConnection)
+	negotiationReply := newNegotiationReply(methodToUseIn(negotiationRequest.methods), socksConnection)
 	if _, err := negotiationReply.WriteTo(*socksConnection.clientTCPConn); err != nil {
 		socksConnection.logWithLevel(logLevelError, "Failed to write the negotiation reply.")
 		return
+	}
+
+	if methodNeedsUserPasswordAuth(negotiationReply.method) {
+		userPasswordAuthRequest, err := newUserPasswordAuthRequestFrom(socksConnection)
+		if err != nil {
+			socksConnection.logWithLevel(logLevelError, "Failed to read the user password authentication request.")
+			return
+		}
+
+		userName := userPasswordAuthRequest.usernameAsString()
+		password := userPasswordAuthRequest.passwordAsString()
+
+		authSuccess := authenticate(userName, password)
+
+		userPasswordAuthReply := newUserPasswordAuthReply(authSuccess, socksConnection)
+		if _, err := userPasswordAuthReply.WriteTo(*socksConnection.clientTCPConn); err != nil {
+			socksConnection.logWithLevel(logLevelError, "Failed to write the authentication reply.")
+			return
+		}
 	}
 
 	request, err := newRequestFrom(socksConnection)

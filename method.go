@@ -9,4 +9,25 @@ const (
 	noAcceptable   byte = 0xFF
 )
 
-var supportedMethod = noAuthRequired
+func methodToUseIn(methods []byte) byte {
+	if methodExists(methods, usernamePasswd) {
+		return usernamePasswd
+	}
+	if methodExists(methods, noAuthRequired) {
+		return noAuthRequired
+	}
+	return noAcceptable
+}
+
+func methodExists(methods []byte, targetMethod byte) bool {
+	for _, method := range methods {
+		if method == targetMethod {
+			return true
+		}
+	}
+	return false
+}
+
+func methodNeedsUserPasswordAuth(method byte) bool {
+	return method == usernamePasswd
+}

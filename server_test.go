@@ -47,8 +47,7 @@ func TestConnect(t *testing.T) {
 
 	client, err := socks5.NewClient(proxyAddress, "", "", 0, 60)
 	if err != nil {
-		log.Println(err)
-		return
+		t.Fatal(err)
 	}
 
 	httpClient := &http.Client{
@@ -60,14 +59,12 @@ func TestConnect(t *testing.T) {
 	}
 	res, err := httpClient.Get("https://ifconfig.co")
 	if err != nil {
-		log.Println(err)
-		return
+		t.Fatal(err)
 	}
 	defer res.Body.Close()
 	responseBytes, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		log.Println(err)
-		return
+		t.Fatal(err)
 	}
 
 	ipString := string(bytes.TrimSpace(responseBytes))
@@ -189,4 +186,83 @@ func parseDNSResponse(response []byte) error {
 	}
 
 	return nil
+}
+
+func TestUserAndPasswordAuthOK(t *testing.T) {
+	user := "jfuruya"
+	password := "p@@ssw00rd!?"
+
+	os.Setenv("MYSOCKS_USER", user)
+	os.Setenv("MYSOCKS_PASSWORD", password)
+
+	StartServer()
+	defer func() {
+		os.Setenv("MYSOCKS_USER", "")
+		os.Setenv("MYSOCKS_PASSWORD", "")
+	}()
+	defer StopServer()
+
+	socks5.Debug = true
+
+	client, err := socks5.NewClient(proxyAddress, user, password, 0, 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			Dial: func(network, addr string) (net.Conn, error) {
+				return client.Dial(network, addr)
+			},
+		},
+	}
+	res, err := httpClient.Get("https://ifconfig.co")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	responseBytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ipString := string(bytes.TrimSpace(responseBytes))
+	ip := net.ParseIP(ipString)
+	if ip == nil {
+		t.Fatalf("Failed to parse the IP address: %s", ipString)
+	}
+}
+
+func TestUserAndPasswordAuthFail(t *testing.T) {
+	user := "jfuruya"
+	password := "p@@ssw00rd!?"
+
+	os.Setenv("MYSOCKS_USER", user)
+	os.Setenv("MYSOCKS_PASSWORD", password)
+
+	StartServer()
+	defer func() {
+		os.Setenv("MYSOCKS_USER", "")
+		os.Setenv("MYSOCKS_PASSWORD", "")
+	}()
+	defer StopServer()
+
+	socks5.Debug = true
+
+	client, err := socks5.NewClient(proxyAddress, user, "invalid_password", 0, 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			Dial: func(network, addr string) (net.Conn, error) {
+				return client.Dial(network, addr)
+			},
+		},
+	}
+	_, err = httpClient.Get("https://ifconfig.co")
+	if err == nil {
+		t.Fatalf("Error expected, but got nil")
+	}
 }
